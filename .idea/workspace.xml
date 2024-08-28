@@ -43,6 +43,7 @@
   <component name="RunManager">
     <configuration name="env_single_phase_123bus" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="Stable-DDPG-for-voltage-control-main" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <envs>
