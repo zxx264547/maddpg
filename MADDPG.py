@@ -268,13 +268,15 @@ class MADDPG:
             state_storage = env.reset_storage()
             episode_reward_pv = 0
             episode_reward_storage = 0
+            # 初始化越限率
+            over_limit_rate = 1
 
             done = False
-            while not done:
+            while over_limit_rate > 0.05:
                 #根据当前状态获得每个智能体的动作
                 actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
                 actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
-                #根据动作获得下一个状态和奖励（单个）
+                #根据动作获得单个智能体的下一个状态和奖励（潮流计算）
                 #TODO:检查代码
                 next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
                 next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
@@ -288,18 +290,15 @@ class MADDPG:
                 state_pv = next_state_pv
                 state_storage = next_state_storage
                 #TODO:这一步的奖励计算是否有必要
-                # episode_reward_pv += sum(rewards_pv)
-                # episode_reward_storage += sum(rewards_storage)
-                #
-                # done = any(done_pv) or any(done_storage)
-                #TODO:潮流计算，计算电压越限率
-                # 记录电压数据并计算电压越限率
-                # voltage = env.network.res_bus.vm_pu.to_numpy()
-                # voltage_data.append(voltage)
-                # over_limit_rate = np.mean((voltage > env.vmax) | (voltage < env.vmin))
-                # over_limit_rates.append(over_limit_rate)
-                #
-                # self.update()
+                episode_reward_pv += sum(rewards_pv)
+                episode_reward_storage += sum(rewards_storage)
+                #计算电压越限率
+                combined = np.concatenate((done_pv, done_storage)) # 合并两个数组
+                count_ones = np.sum(combined) # 统计值为 1 的数量（没有越限的智能体的数量）
+                over_limit_rate = 1 - count_ones / len(combined) # 计算越限率
+                over_limit_rates.append(over_limit_rate)
+                #更新网络参数
+                self.update()
 
             print(f"Episode {episode + 1}, PV Reward: {episode_reward_pv}, Storage Reward: {episode_reward_storage}")
 
@@ -314,7 +313,7 @@ class MADDPG:
             max_steps = 10
             step_count = 0
             done = False
-            while not done and step_count < max_steps:
+            while step_count < max_steps:
                 step_count += 1
                 actions_pv = [agent.get_action(state_pv[i], epsilon) for i, agent in enumerate(self.pv_agents)]
                 actions_storage = [agent.get_action(state_storage[i], epsilon) for i, agent in
@@ -331,8 +330,6 @@ class MADDPG:
 
                 state_pv = next_state_pv
                 state_storage = next_state_storage
-
-                done = any(done_pv) or any(done_storage)
 
     def save_model(self, directory):
         for i, agent in enumerate(self.pv_agents):
