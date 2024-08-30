@@ -189,6 +189,7 @@ class MADDPG:
     #         self._update_agents(self.storage_agents, states, actions, rewards, next_states, dones)
 
     #智能体共享缓冲区
+    #更新网络参数
     def update(self):
         self._update_agents(self.pv_agents, self.pv_replay_buffer)
         self._update_agents(self.storage_agents, self.storage_replay_buffer)
@@ -252,7 +253,9 @@ class MADDPG:
         return value_loss
 
     def train(self, num_episodes, pp_net, pv_bus, es_bus):
+        #创建配电网环境
         env = IEEE123bus(pp_net, pv_bus, es_bus)
+        #初始化节点电压和越限率
         voltage_data = []
         over_limit_rates = []
 
@@ -260,41 +263,43 @@ class MADDPG:
         self._initialize_replay_buffer(env)
 
         for episode in range(num_episodes):
+            #初始化环境（每个智能体的状态和总奖励）
             state_pv = env.reset_pv()
             state_storage = env.reset_storage()
-
             episode_reward_pv = 0
             episode_reward_storage = 0
 
             done = False
             while not done:
+                #根据当前状态获得每个智能体的动作
                 actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
                 actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
-
+                #根据动作获得下一个状态和奖励（单个）
+                #TODO:检查代码
                 next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
                 next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
-
+                #将数据放入缓冲区
                 for i, agent in enumerate(self.pv_agents):
                     self.pv_replay_buffer.add(state_pv[i], actions_pv[i], rewards_pv[i], next_state_pv[i], done_pv[i])
                 for i, agent in enumerate(self.storage_agents):
                     self.storage_replay_buffer.add(state_storage[i], actions_storage[i], rewards_storage[i],
                                                    next_state_storage[i], done_storage[i])
-
+                #更新状态
                 state_pv = next_state_pv
                 state_storage = next_state_storage
-
-                episode_reward_pv += sum(rewards_pv)
-                episode_reward_storage += sum(rewards_storage)
-
-                done = any(done_pv) or any(done_storage)
-
+                #TODO:这一步的奖励计算是否有必要
+                # episode_reward_pv += sum(rewards_pv)
+                # episode_reward_storage += sum(rewards_storage)
+                #
+                # done = any(done_pv) or any(done_storage)
+                #TODO:潮流计算，计算电压越限率
                 # 记录电压数据并计算电压越限率
-                voltage = env.network.res_bus.vm_pu.to_numpy()
-                voltage_data.append(voltage)
-                over_limit_rate = np.mean((voltage > env.vmax) | (voltage < env.vmin))
-                over_limit_rates.append(over_limit_rate)
-
-                self.update()
+                # voltage = env.network.res_bus.vm_pu.to_numpy()
+                # voltage_data.append(voltage)
+                # over_limit_rate = np.mean((voltage > env.vmax) | (voltage < env.vmin))
+                # over_limit_rates.append(over_limit_rate)
+                #
+                # self.update()
 
             print(f"Episode {episode + 1}, PV Reward: {episode_reward_pv}, Storage Reward: {episode_reward_storage}")
 
@@ -347,6 +352,7 @@ class MADDPG:
             agent.policy_net.load_state_dict(torch.load(f"{directory}/storage_agent_{i}_policy.pth"))
             agent.value_net.load_state_dict(torch.load(f"{directory}/storage_agent_{i}_value.pth"))
 
+    #TODO:这个函数是否有必要
     def online_train(self, num_steps, pp_net, pv_bus, es_bus):
         env = IEEE123bus(pp_net, pv_bus, es_bus)
         voltage_data = []
