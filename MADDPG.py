@@ -167,7 +167,7 @@ class StorageAgent:
 
 
 class MADDPG:
-    #参数：光伏参数（输入维度，隐藏维度，输出维度），储能参数，光伏节点，储能节点，目标Q值的软更新参数，目标网络的软更新参数，缓冲区大小，采样大小
+    #参数：光伏参数（输入维度，隐藏维度，输出维度），储能参数，光伏节点，储能节点，折扣因子，目标网络的软更新参数，缓冲区大小，采样大小
     def __init__(self, pv_params, storage_params, pv_bus, es_bus, gamma, tau, buffer_size, batch_size):
         self.gamma = gamma
         self.tau = tau
@@ -210,10 +210,12 @@ class MADDPG:
         next_states = torch.FloatTensor(next_states).to(agent.device)
         dones = torch.FloatTensor(dones).unsqueeze(1).to(agent.device)
         #计算策略网络的损失
-        policy_loss = self._compute_policy_loss(agent, states, actions)
+        policy_loss = self._compute_policy_loss(agent, states)
         #计算价值网络的损失
         value_loss = self._compute_value_loss(agent, states, actions, rewards, next_states, dones)
 
+        #TODO:在论文中，把这里的更新步长变为N步
+        #更新在线网络的参数（根据损失函数更新梯度）
         agent.policy_optimizer.zero_grad()
         policy_loss.backward()
         agent.policy_optimizer.step()
@@ -221,24 +223,27 @@ class MADDPG:
         agent.value_optimizer.zero_grad()
         value_loss.backward()
         agent.value_optimizer.step()
-
+        #更新目标网络的参数
         agent.update_target_networks(self.tau)
 
-    def _compute_policy_loss(self, agent, states, actions):
+    #根据当前的状态生成的动作来计算损失
+    def _compute_policy_loss(self, agent, states):
         #通过观测值（状态）计算策略网络的生成动作
         policy_actions = agent.policy_net(states)
-        #通过价值网咯评价损失
+        #计算损失（通过最小化损失来更新参数）
         policy_loss = -agent.value_net(states, policy_actions).mean()
         return policy_loss
-
+    #根据与目标网络的差异来更新在线价值网络
     def _compute_value_loss(self, agent, states, actions, rewards, next_states, dones):
         # 计算目标Q值
         with torch.no_grad():
             next_actions = agent.target_policy_net(next_states)
             target_q = agent.target_value_net(next_states, next_actions)
+            #done为1时，表示终止状态，目标Q值为即时奖励；否则，要考虑未来奖励
             target_q = rewards + (1 - dones) * self.gamma * target_q
 
         # 计算当前Q值
+        #TODO:此时的action应该是在线actor网络根据当前状态计算出来的，还是从采样池里采样出来的
         current_q = agent.value_net(states, actions)
 
         # 计算价值网络的损失
