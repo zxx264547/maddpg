@@ -3,32 +3,36 @@ from gym import spaces
 import numpy as np
 import pandapower as pp
 
-
+# 功能：
+# 初始化
+# 潮流计算
+# 计算单个奖励
 class IEEE123bus(gym.Env):
     def __init__(self, pp_net, pv_bus, es_bus, v0=1, vmax=1.05, vmin=0.95):
         super(IEEE123bus, self).__init__()
 
         self.network = pp_net  # pp_net 是通过 create_123bus() 函数创建的 Pandapower 网络对象。
-        self.obs_dim = 5  # 观测维度
-        self.pv_action_dim = 1  # 光伏动作维度
-        self.es_action_dim = 2  # 储能动作维度
+        # self.obs_dim = 5  # 观测维度（输入维度）
+        # self.pv_action_dim = 1  # 光伏动作维度（输出维度）
+        # self.es_action_dim = 2  # 储能动作维度（输出维度）
         self.pv_buses = list(pv_bus)  # 光伏智能体控制的节点
         self.es_buses = list(es_bus)  # 储能智能体控制的节点
         # 存储光伏和储能节点的索引
         self.pv_buses_index = list(range(0, len(pv_bus)))
         self.es_buses_index = list(range(0, len(es_bus)))
-
-        self.v0 = v0  # 初始电压值
+        # 初始电压值以及电压阈值
+        self.v0 = v0
         self.vmax = vmax
         self.vmin = vmin
 
-        # 定义光伏智能体的状态空间和动作空间
-        self.pv_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
-        self.pv_action_space = spaces.Box(low=-1, high=1, shape=(self.pv_action_dim,), dtype=np.float32)
-
-        # 定义储能智能体的状态空间和动作空间
-        self.storage_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
-        self.storage_action_space = spaces.Box(low=-1, high=1, shape=(self.es_action_dim,), dtype=np.float32)
+        # # 定义光伏智能体的状态空间和动作空间
+        # #TODO：这里的动作空间是归一化的值还是实际值好一点？
+        # self.pv_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
+        # self.pv_action_space = spaces.Box(low=-1, high=1, shape=(self.pv_action_dim,), dtype=np.float32)
+        #
+        # # 定义储能智能体的状态空间和动作空间
+        # self.storage_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
+        # self.storage_action_space = spaces.Box(low=-1, high=1, shape=(self.es_action_dim,), dtype=np.float32)
 
         # 初始化环境状态
         self.state_pv = self._get_initial_state('pv', self.pv_buses)
@@ -119,7 +123,7 @@ class IEEE123bus(gym.Env):
         if agent_type == 'pv':
             if bus in self.network.sgen['bus'].values:
                 sgen_idx = self.network.sgen[self.network.sgen['bus'] == bus].index[0]
-                # 确保动作在合理范围内
+                # TODO:是否需要确保动作在合理范围内
                 # q_mvar = np.clip(float(action), -1.0, 1.0)
                 # self.network.sgen.loc[sgen_idx, 'q_mvar'] = q_mvar
                 self.network.sgen.loc[sgen_idx, 'q_mvar'] = float(action)
@@ -128,7 +132,7 @@ class IEEE123bus(gym.Env):
         elif agent_type == 'storage':
             if bus in self.network.storage['bus'].values:
                 storage_idx = self.network.storage[self.network.storage['bus'] == bus].index[0]
-                # 确保动作在合理范围内
+                # TODO:是否需要确保动作在合理范围内
                 # p_mw = np.clip(float(action[0]), -1.0, 1.0)
                 # q_mvar = np.clip(float(action[1]), -1.0, 1.0)
                 # self.network.storage.loc[storage_idx, 'p_mw'] = p_mw
@@ -138,6 +142,7 @@ class IEEE123bus(gym.Env):
             else:
                 print(f"Warning: Bus {bus} not found in storage")
 
+    # TODO:计算单个智能体的奖励
     def _calculate_reward(self, state, agent_type):
         voltage = state[-1]
         reward = -abs(voltage - 1.0)  # 以电压偏离1.0的绝对值为负奖励
@@ -147,5 +152,6 @@ class IEEE123bus(gym.Env):
 
     def _check_done(self, state, agent_type):
         voltage = state[-1]
-        return voltage < self.vmin or voltage > self.vmax
+        # return voltage < self.vmin or voltage > self.vmax
+        return self.vmin < voltage < self.vmax
 
