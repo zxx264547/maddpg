@@ -38,7 +38,7 @@ pv_params = (5, 1, 64)  # 观测维度，动作维度，隐藏层维度
 storage_params = (5, 2, 64)  # 观测维度，动作维度，隐藏层维度
 
 # 创建 MADDPG 实例
-maddpg = MADDPG(pv_params, storage_params, pv_buses, es_buses, gamma=0.99, tau=0.01, buffer_size=100000, batch_size=64)
+maddpg = MADDPG(pv_params, storage_params, pv_buses, es_buses, gamma=0.99, beta=0.5, tau=0.01, buffer_size=100000, batch_size=64)
 
 # # 训练模型并记录电压数据
 # voltage_data, over_limit_rates = maddpg.train(num_episodes=500, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)

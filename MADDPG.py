@@ -168,7 +168,13 @@ class StorageAgent:
 
 class MADDPG:
     #参数：光伏参数（输入维度，隐藏维度，输出维度），储能参数，光伏节点，储能节点，折扣因子，目标网络的软更新参数，缓冲区大小，采样大小
-    def __init__(self, pv_params, storage_params, pv_bus, es_bus, gamma, tau, buffer_size, batch_size):
+    def __init__(self, pv_params, storage_params, pv_bus, es_bus, gamma, beta, tau, buffer_size, batch_size):
+        # 计算总体reward相关变量
+        # global_reward = total_power_loss + self_reward + beta * (sum_reward - self_reward)
+        self.sum_reward = None
+        self.total_power_loss = None
+        self.beta = beta
+        # end
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
@@ -241,10 +247,12 @@ class MADDPG:
             next_actions = agent.target_policy_net(next_states)
             target_q = agent.target_value_net(next_states, next_actions)
             #done为1时，表示终止状态，目标Q值为即时奖励；否则，要考虑未来奖励
-            target_q = rewards + (1 - dones) * self.gamma * target_q
+            # TODO:这里的rewards要考虑总体的rewards（论文中rewards的改变也是在这里体现）
+            global_reward = self.total_power_loss + self.beta * (self.sum_reward - rewards) + rewards
+            target_q = global_reward + (1 - dones) * self.gamma * target_q
 
         # 计算当前Q值
-        #TODO:此时的action应该是在线actor网络根据当前状态计算出来的，还是从采样池里采样出来的
+        #TODO:此时的action应该是在线actor网络根据当前状态计算出来的，还是从采样池里采样出来的(目前的方案里面是采样池中的)
         current_q = agent.value_net(states, actions)
 
         # 计算价值网络的损失
@@ -266,18 +274,15 @@ class MADDPG:
             #初始化环境（每个智能体的状态和总奖励）
             state_pv = env.reset_pv()
             state_storage = env.reset_storage()
-            episode_reward_pv = 0
-            episode_reward_storage = 0
             # 初始化越限率
             over_limit_rate = 1
 
-            done = False
             while over_limit_rate > 0.05:
                 #根据当前状态获得每个智能体的动作
                 actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
                 actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
-                #根据动作获得单个智能体的下一个状态和奖励（潮流计算）
-                #TODO:检查代码
+                #根据动作获得每个智能体的下一个状态和奖励（潮流计算）
+                #TODO: 这里的先后顺序是否有影响？
                 next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
                 next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
                 #将数据放入缓冲区
@@ -289,18 +294,22 @@ class MADDPG:
                 #更新状态
                 state_pv = next_state_pv
                 state_storage = next_state_storage
-                #TODO:这一步的奖励计算是否有必要
-                episode_reward_pv += sum(rewards_pv)
-                episode_reward_storage += sum(rewards_storage)
-                #计算电压越限率
-                combined = np.concatenate((done_pv, done_storage)) # 合并两个数组
-                count_ones = np.sum(combined) # 统计值为 1 的数量（没有越限的智能体的数量）
-                over_limit_rate = 1 - count_ones / len(combined) # 计算越限率
+
+                self.sum_reward = sum(rewards_pv) + sum(rewards_storage)
+                # 所有线路的有功损耗 + 无功损耗
+                self.total_power_loss = pp_net.res_line.pl_mw.sum() + pp_net.res_line.ql_mvar.sum()
+                # 记录电压数据并计算电压越限率
+                voltage = env.network.res_bus.vm_pu.to_numpy()
+                voltage_data.append(voltage)
+                # 计算电压越限率
+                combined = np.concatenate((done_pv, done_storage))  # 合并两个数组
+                count_ones = np.sum(combined)  # 统计值为 1 的数量（没有越限的智能体的数量）
+                over_limit_rate = 1 - count_ones / len(combined)  # 计算越限率
                 over_limit_rates.append(over_limit_rate)
                 #更新网络参数
                 self.update()
 
-            print(f"Episode {episode + 1}, PV Reward: {episode_reward_pv}, Storage Reward: {episode_reward_storage}")
+            print(f"Episode {episode + 1}, global_Reward: {self.global_reward}")
 
         return voltage_data, over_limit_rates
 
@@ -312,7 +321,6 @@ class MADDPG:
 
             max_steps = 10
             step_count = 0
-            done = False
             while step_count < max_steps:
                 step_count += 1
                 actions_pv = [agent.get_action(state_pv[i], epsilon) for i, agent in enumerate(self.pv_agents)]
@@ -380,14 +388,15 @@ class MADDPG:
             # 记录电压数据并计算电压越限率
             voltage = env.network.res_bus.vm_pu.to_numpy()
             voltage_data.append(voltage)
-            over_limit_rate = np.mean((voltage > env.vmax) | (voltage < env.vmin))
+            # 计算电压越限率
+            combined = np.concatenate((done_pv, done_storage))  # 合并两个数组
+            count_ones = np.sum(combined)  # 统计值为 1 的数量（没有越限的智能体的数量）
+            over_limit_rate = 1 - count_ones / len(combined)  # 计算越限率
             over_limit_rates.append(over_limit_rate)
 
             print(f"Step {step + 1}, Voltage Limit Exceedance Rate: {over_limit_rate}")
-
             # 定期保存模型
-            if (step + 1) % 100 == 0:
-                self.save_model('online_model_directory')
-
+            # if (step + 1) % 100 == 0:
+            #     self.save_model('online_model_directory')
         return voltage_data, over_limit_rates
 
