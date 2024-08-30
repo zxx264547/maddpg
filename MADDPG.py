@@ -14,7 +14,7 @@ StorageAgent
 MADDPG
 """
 
-#todo:光伏和储能是不是要设置不同的ReplayBuffer
+
 class ReplayBuffer:
     def __init__(self, capacity):
         self.capacity = capacity
@@ -87,35 +87,42 @@ class ValueNetwork(nn.Module):
 
 class PVAgent:
     def __init__(self, id, obs_dim, action_dim, hidden_dim):
-        self.id = id
+        self.id = id #光伏ID
+        #初始化策略网络和价值网络
         self.policy_net = PolicyNetwork(obs_dim, action_dim, hidden_dim)
         self.target_policy_net = PolicyNetwork(obs_dim, action_dim, hidden_dim)
         self.value_net = ValueNetwork(obs_dim, action_dim, hidden_dim)
         self.target_value_net = ValueNetwork(obs_dim, action_dim, hidden_dim)
+        #定义神经网络的优化器为Adam，输入参数为：神经网络的所有参数（权重和偏置），学习率（0.0001）
         self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=2e-4)
         self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=1e-4)
+        #定义损失函数，用于网络的优化
         self.value_criterion = nn.MSELoss()
-
+        #检查是否有可用的GPU，并设置设备
         use_cuda = torch.cuda.is_available()
         self.device = torch.device("cuda" if use_cuda else "cpu")
-
+        #将所有网络移动到计算设备（CPU或者GPU）
         self.policy_net.to(self.device)
         self.target_policy_net.to(self.device)
         self.value_net.to(self.device)
         self.target_value_net.to(self.device)
 
+    #使用epsilon-贪心策略获取光伏的动作
     def get_action(self, state, epsilon=0.1):
+        #以概率epsilon选择一个随机动作（探索）
         if random.random() < epsilon:
-            # 随机选择动作（探索）
+            # 生成一个在[-1,1]范围内的随机动作（动作维度为输出层的维度），概率为epsilon
             return np.random.uniform(-1, 1, self.policy_net.linear3.out_features)
         else:
-            # 使用策略网络选择动作（利用）
+            # 使用策略网络选择动作，概率为（1-epsilon）
             state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-            action = self.policy_net(state)
+            action = self.policy_net.forward(state)
             return action.detach().cpu().numpy()[0]
 
+    #目标网络的参数以软更新的方式更新
     def update_target_networks(self, soft_tau):
         for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
+            # 软更新公式: target_param = target_param * (1 - soft_tau) + param * soft_tau
             target_param.data.copy_(target_param.data * (1.0 - soft_tau) + param.data * soft_tau)
 
         for target_param, param in zip(self.target_policy_net.parameters(), self.policy_net.parameters()):
@@ -125,10 +132,12 @@ class PVAgent:
 class StorageAgent:
     def __init__(self, id, obs_dim, action_dim, hidden_dim):
         self.id = id
+
         self.policy_net = PolicyNetwork(obs_dim, action_dim, hidden_dim)
         self.target_policy_net = PolicyNetwork(obs_dim, action_dim, hidden_dim)
         self.value_net = ValueNetwork(obs_dim, action_dim, hidden_dim)
-        self.target_value_net = ValueNetwork(obs_dim, action_dim, hidden_dim)
+        self.target_value_net = ValueNetwork(obs_dim, action_dim, hidden_dim
+                                             )
         self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=2e-4)
         self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=1e-4)
         self.value_criterion = nn.MSELoss()
@@ -143,12 +152,10 @@ class StorageAgent:
 
     def get_action(self, state, epsilon=0.1):
         if random.random() < epsilon:
-            # 随机选择动作（探索）
             return np.random.uniform(-1, 1, self.policy_net.linear3.out_features)
         else:
-            # 使用策略网络选择动作（利用）
             state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-            action = self.policy_net(state)
+            action = self.policy_net.forward(state)
             return action.detach().cpu().numpy()[0]
 
     def update_target_networks(self, soft_tau):
@@ -160,14 +167,15 @@ class StorageAgent:
 
 
 class MADDPG:
+    #参数：光伏参数（输入维度，隐藏维度，输出维度），储能参数，光伏节点，储能节点，目标Q值的软更新参数，目标网络的软更新参数，缓冲区大小，采样大小
     def __init__(self, pv_params, storage_params, pv_bus, es_bus, gamma, tau, buffer_size, batch_size):
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
-
+        #构造多智能体
         self.pv_agents = [PVAgent(i, *pv_params) for i in range(len(pv_bus))]
         self.storage_agents = [StorageAgent(i, *storage_params) for i in range(len(es_bus))]
-
+        #初始化缓冲区
         self.pv_replay_buffer = ReplayBuffer(buffer_size)
         self.storage_replay_buffer = ReplayBuffer(buffer_size)
 
@@ -179,6 +187,8 @@ class MADDPG:
     #     if len(self.storage_replay_buffer) >= self.batch_size:
     #         states, actions, rewards, next_states, dones = self.storage_replay_buffer.sample(self.batch_size)
     #         self._update_agents(self.storage_agents, states, actions, rewards, next_states, dones)
+
+    #智能体共享缓冲区
     def update(self):
         self._update_agents(self.pv_agents, self.pv_replay_buffer)
         self._update_agents(self.storage_agents, self.storage_replay_buffer)
@@ -199,8 +209,9 @@ class MADDPG:
         rewards = torch.FloatTensor(rewards).unsqueeze(1).to(agent.device)
         next_states = torch.FloatTensor(next_states).to(agent.device)
         dones = torch.FloatTensor(dones).unsqueeze(1).to(agent.device)
-
+        #计算策略网络的损失
         policy_loss = self._compute_policy_loss(agent, states, actions)
+        #计算价值网络的损失
         value_loss = self._compute_value_loss(agent, states, actions, rewards, next_states, dones)
 
         agent.policy_optimizer.zero_grad()
@@ -212,6 +223,28 @@ class MADDPG:
         agent.value_optimizer.step()
 
         agent.update_target_networks(self.tau)
+
+    def _compute_policy_loss(self, agent, states, actions):
+        #通过观测值（状态）计算策略网络的生成动作
+        policy_actions = agent.policy_net(states)
+        #通过价值网咯评价损失
+        policy_loss = -agent.value_net(states, policy_actions).mean()
+        return policy_loss
+
+    def _compute_value_loss(self, agent, states, actions, rewards, next_states, dones):
+        # 计算目标Q值
+        with torch.no_grad():
+            next_actions = agent.target_policy_net(next_states)
+            target_q = agent.target_value_net(next_states, next_actions)
+            target_q = rewards + (1 - dones) * self.gamma * target_q
+
+        # 计算当前Q值
+        current_q = agent.value_net(states, actions)
+
+        # 计算价值网络的损失
+        value_loss = agent.value_criterion(current_q, target_q)
+
+        return value_loss
 
     def train(self, num_episodes, pp_net, pv_bus, es_bus):
         env = IEEE123bus(pp_net, pv_bus, es_bus)
@@ -290,26 +323,6 @@ class MADDPG:
                 state_storage = next_state_storage
 
                 done = any(done_pv) or any(done_storage)
-
-    def _compute_policy_loss(self, agent, states, actions):
-        policy_actions = agent.policy_net(states)
-        policy_loss = -agent.value_net(states, policy_actions).mean()
-        return policy_loss
-
-    def _compute_value_loss(self, agent, states, actions, rewards, next_states, dones):
-        # 计算目标Q值
-        with torch.no_grad():
-            next_actions = agent.target_policy_net(next_states)
-            target_q = agent.target_value_net(next_states, next_actions)
-            target_q = rewards + (1 - dones) * self.gamma * target_q
-
-        # 计算当前Q值
-        current_q = agent.value_net(states, actions)
-
-        # 计算价值网络的损失
-        value_loss = agent.value_criterion(current_q, target_q)
-
-        return value_loss
 
     def save_model(self, directory):
         for i, agent in enumerate(self.pv_agents):
