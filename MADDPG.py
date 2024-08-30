@@ -14,7 +14,7 @@ StorageAgent
 MADDPG
 """
 
-
+#todo:光伏和储能是不是要设置不同的ReplayBuffer
 class ReplayBuffer:
     def __init__(self, capacity):
         self.capacity = capacity
@@ -38,6 +38,7 @@ class ReplayBuffer:
         self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size):
+        #batch_size为一次抽取的样本数
         batch = random.sample(self.buffer, batch_size)
         states, actions, rewards, next_states, dones = map(np.stack, zip(*batch))
         return states, actions, rewards, next_states, dones
@@ -47,15 +48,18 @@ class ReplayBuffer:
 
 
 class PolicyNetwork(nn.Module):
+    #输入：输入维度，输出维度，隐藏层维度
     def __init__(self, obs_dim, action_dim, hidden_dim):
         super(PolicyNetwork, self).__init__()
+        #全连接层：输入-> 隐藏-> 隐藏-> 输出
         self.linear1 = nn.Linear(obs_dim, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         self.linear3 = nn.Linear(hidden_dim, action_dim)
-
+        #初始化权重和偏置项
         self.linear3.weight.data.uniform_(-3e-3, 3e-3)
         self.linear3.bias.data.uniform_(-3e-3, 3e-3)
-
+    #forward是前向传播的过程，即给定输入获得输出
+    #这里输入为state，即为观测值，输出为x，即为动作
     def forward(self, state):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
