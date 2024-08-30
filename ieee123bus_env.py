@@ -3,15 +3,18 @@ from gym import spaces
 import numpy as np
 import pandapower as pp
 
-
+# 功能：
+# 初始化
+# 潮流计算
+# 计算单个奖励
 class IEEE123bus(gym.Env):
     def __init__(self, pp_net, pv_bus, es_bus, v0=1, vmax=1.05, vmin=0.95):
         super(IEEE123bus, self).__init__()
 
         self.network = pp_net  # pp_net 是通过 create_123bus() 函数创建的 Pandapower 网络对象。
-        self.obs_dim = 5  # 观测维度（输入维度）
-        self.pv_action_dim = 1  # 光伏动作维度（输出维度）
-        self.es_action_dim = 2  # 储能动作维度（输出维度）
+        # self.obs_dim = 5  # 观测维度（输入维度）
+        # self.pv_action_dim = 1  # 光伏动作维度（输出维度）
+        # self.es_action_dim = 2  # 储能动作维度（输出维度）
         self.pv_buses = list(pv_bus)  # 光伏智能体控制的节点
         self.es_buses = list(es_bus)  # 储能智能体控制的节点
         # 存储光伏和储能节点的索引
@@ -22,14 +25,14 @@ class IEEE123bus(gym.Env):
         self.vmax = vmax
         self.vmin = vmin
 
-        # 定义光伏智能体的状态空间和动作空间
-        #TODO：这里的动作空间是归一化的值还是实际值好一点？
-        self.pv_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
-        self.pv_action_space = spaces.Box(low=-1, high=1, shape=(self.pv_action_dim,), dtype=np.float32)
-
-        # 定义储能智能体的状态空间和动作空间
-        self.storage_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
-        self.storage_action_space = spaces.Box(low=-1, high=1, shape=(self.es_action_dim,), dtype=np.float32)
+        # # 定义光伏智能体的状态空间和动作空间
+        # #TODO：这里的动作空间是归一化的值还是实际值好一点？
+        # self.pv_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
+        # self.pv_action_space = spaces.Box(low=-1, high=1, shape=(self.pv_action_dim,), dtype=np.float32)
+        #
+        # # 定义储能智能体的状态空间和动作空间
+        # self.storage_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
+        # self.storage_action_space = spaces.Box(low=-1, high=1, shape=(self.es_action_dim,), dtype=np.float32)
 
         # 初始化环境状态
         self.state_pv = self._get_initial_state('pv', self.pv_buses)

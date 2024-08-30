@@ -295,9 +295,11 @@ class MADDPG:
                 state_pv = next_state_pv
                 state_storage = next_state_storage
 
+
+                # 计算每个智能体奖励之和
                 self.sum_reward = sum(rewards_pv) + sum(rewards_storage)
-                # 所有线路的有功损耗 + 无功损耗
-                self.total_power_loss = pp_net.res_line.pl_mw.sum() + pp_net.res_line.ql_mvar.sum()
+                # 计算功率损耗（所有线路的有功损耗 + 无功损耗）(标幺值)
+                self.total_power_loss = (env.network.res_line.pl_mw.sum() + env.network.res_line.ql_mvar.sum()) / env.network.sn_mva
                 # 记录电压数据并计算电压越限率
                 voltage = env.network.res_bus.vm_pu.to_numpy()
                 voltage_data.append(voltage)
