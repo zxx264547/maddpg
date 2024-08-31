@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+# 配置 Matplotlib 使用支持中文的字体（SimHei）
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 class DataPlot:
     # voltage_data：每一行代表一个step，每一列代表一个节点
@@ -15,7 +18,7 @@ class DataPlot:
         for node_index in selected_nodes:
             # 提取每个节点的电压数据
             node_voltage_over_time = voltage_data[:, node_index]
-            plt.plot(steps, node_voltage_over_time, marker='o', linestyle='-', label=f'Node {node_index + 1} Voltage')
+            plt.plot(steps, node_voltage_over_time, linestyle='-', label=f'Node {node_index + 1} Voltage')
         # 图形标签和标题
         plt.xlabel('Step')  # 横坐标是时间步
         plt.ylabel('Voltage (p.u.)')  # 纵坐标是电压
@@ -28,7 +31,7 @@ class DataPlot:
     def voltage_violation_rates_step(cls, voltage_violation_rates):
         # 绘制电压越限率随时间的变化
         plt.figure(figsize=(10, 5))
-        plt.plot(voltage_violation_rates)
+        plt.plot(voltage_violation_rates, label=f'voltage_violation_rates')
         plt.xlabel('Step')
         plt.ylabel('电压越限率')
         plt.title('电压越限率变化')

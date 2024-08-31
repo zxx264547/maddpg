@@ -35,68 +35,53 @@ class IEEE123bus(gym.Env):
         # self.storage_action_space = spaces.Box(low=-1, high=1, shape=(self.es_action_dim,), dtype=np.float32)
 
         # 初始化环境状态
-        self.state_pv = self._get_initial_state('pv', self.pv_buses)
-        self.state_storage = self._get_initial_state('storage', self.es_buses)
+        self.state_pv = []
+        self.state_storage = []
 
-    def reset_pv(self):
-        # 重置光伏智能体的状态
-        self.state_pv = self._get_initial_state('pv', self.pv_buses)  # 基于潮流计算得到初始状态
-        return self.state_pv
+    def reset_agent(self):
+        # 基于潮流计算得到agent的初始局部状态值
+        pp.runpp(self.network)
+        self.state_pv = [self._get_state('pv', bus) for bus in self.pv_buses]
+        self.state_storage = [self._get_state('storage', bus) for bus in self.es_buses]
+        return self.state_pv, self.state_storage
 
-    def reset_storage(self):
-        # 重置储能智能体的状态
-        self.state_storage = self._get_initial_state('storage', self.es_buses)  # 基于潮流计算得到初始状态
-        return self.state_storage
-
-    def step_pv(self, actions):
-        next_states = []
-        rewards = []
-        dones = []
+    def step_agent(self,pv_actions, es_actions):
+        pv_next_states = []
+        pv_rewards = []
+        pv_dones = []
+        es_next_states = []
+        es_rewards = []
+        es_dones = []
         for i, bus in enumerate(self.pv_buses):
-            self._apply_action(actions[i], 'pv', bus)
+            self._apply_action(pv_actions[i], 'pv', bus)
+        for i, bus in enumerate(self.es_buses):
+            self._apply_action(es_actions[i], 'storage', bus)
         try:
             pp.runpp(self.network, max_iteration=50)
         except pp.powerflow.LoadflowNotConverged:
             print("Power flow for PV did not converge")
-            return next_states, rewards, [True] * len(self.pv_buses)  # 终止当前回合
-        all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
+            return pv_next_states, pv_rewards, [True] * len(self.pv_buses), es_next_states, es_rewards, [True] * len(self.es_buses),  # 终止当前回合
+
+        # # 潮流计算成功，获得所有节点电压，用于计算单个智能体的reward
+        # all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
+        # 计算pv的reward和next_state
         for i, bus in enumerate(self.pv_buses):
             next_state = self._get_state('pv', bus)
-            # 得到所有节点电压，用于计算单个智能体的reward
-            reward = self._calculate_reward(all_voltage_values)
-            done = self._check_done(next_state, 'pv')
-            next_states.append(next_state)
-            rewards.append(reward)
-            dones.append(done)
-
-        return next_states, rewards, dones
-
-    def step_storage(self, actions):
-        next_states = []
-        rewards = []
-        dones = []
-        for i, bus in enumerate(self.es_buses):
-            self._apply_action(actions[i], 'storage', bus)
-        try:
-            pp.runpp(self.network, max_iteration=50)
-        except pp.powerflow.LoadflowNotConverged:
-            print("Power flow for storage did not converge")
-            return next_states, rewards, [True] * len(self.es_buses)  # 终止当前回合
-        all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
+            reward = self._calculate_reward(next_state)
+            done = self._check_done(next_state)
+            pv_next_states.append(next_state)
+            pv_rewards.append(reward)
+            pv_dones.append(done)
+        # 计算es的reward和next_state
         for i, bus in enumerate(self.es_buses):
             next_state = self._get_state('storage', bus)
-            reward = self._calculate_reward(all_voltage_values)
-            done = self._check_done(next_state, 'storage')
-            next_states.append(next_state)
-            rewards.append(reward)
-            dones.append(done)
-
-        return next_states, rewards, dones
-
-    def _get_initial_state(self, agent_type, buses):
-        # 获取初始状态的逻辑
-        pp.runpp(self.network)
-        return [self._get_state(agent_type, bus) for bus in buses]
+            reward = self._calculate_reward(next_state)
+            done = self._check_done(next_state)
+            es_next_states.append(next_state)
+            es_rewards.append(reward)
+            es_dones.append(done)
+        # print(f"step agent success")
+        return pv_next_states, pv_rewards, pv_dones, es_next_states, es_rewards, es_dones
 
     def _get_state(self, agent_type, bus):
         if agent_type == 'pv':
@@ -107,6 +92,8 @@ class IEEE123bus(gym.Env):
                 v_pu = self.network.res_bus.at[bus, 'vm_pu']
                 load_p_mw = self.network.load.at[bus, 'p_mw'] if bus in self.network.load['bus'].values else 0.0
                 load_q_mvar = self.network.load.at[bus, 'q_mvar'] if bus in self.network.load['bus'].values else 0.0
+
+                # print(f" get local state: pv_id: {sgen_idx}, p_mw: {p_mw}, q_mvar:{q_mvar}, load_p_mw:{load_p_mw}, load_q_mvar:{load_q_mvar}, v_pu:{v_pu}")
                 return np.array([p_mw, q_mvar, load_p_mw, load_q_mvar, v_pu])
             else:
                 print(f"Warning: Bus {bus} not found in sgen")
@@ -119,6 +106,8 @@ class IEEE123bus(gym.Env):
                 v_pu = self.network.res_bus.at[bus, 'vm_pu']
                 load_p_mw = self.network.load.at[bus, 'p_mw'] if bus in self.network.load['bus'].values else 0.0
                 load_q_mvar = self.network.load.at[bus, 'q_mvar'] if bus in self.network.load['bus'].values else 0.0
+
+                # print(f" get local state: en_id: {storage_idx}, p_mw: {p_mw}, q_mvar:{q_mvar}, load_p_mw:{load_p_mw}, load_q_mvar:{load_q_mvar}, v_pu:{v_pu}")
                 return np.array([p_mw, q_mvar, load_p_mw, load_q_mvar, v_pu])
             else:
                 print(f"Warning: Bus {bus} not found in storage")
@@ -147,22 +136,19 @@ class IEEE123bus(gym.Env):
             else:
                 print(f"Warning: Bus {bus} not found in storage")
 
-    # TODO:计算单个智能体的奖励
-    def _calculate_reward(self, voltage_values):
-        # 计算越限程度：距离上下限的差值
+    def _calculate_reward(self, next_state):
+        voltage = next_state[-1]
         # 对于低于下限的电压，计算为 lower_limit - voltage
-        low_voltage_violations = np.maximum(self.vmin - voltage_values, 0)
+        low_voltage_violations = np.maximum(self.vmin - voltage, 0)
         # 对于高于上限的电压，计算为 voltage - upper_limit
-        high_voltage_violations = np.maximum(voltage_values - self.vmax, 0)
+        high_voltage_violations = np.maximum(voltage - self.vmax, 0)
         # 计算总的电压越限程度
         voltage_violations = low_voltage_violations + high_voltage_violations
-        # 定义奖励函数
-        # 将电压越限的总程度转换为负奖励，越限越严重，奖励越低
-        reward = -np.sum(voltage_violations) * 10
+        reward = -voltage_violations * 1000
+        # reward是一个标量
         return reward
 
-    def _check_done(self, state, agent_type):
+    def _check_done(self, state):
         voltage = state[-1]
-        # return voltage < self.vmin or voltage > self.vmax
         return self.vmin < voltage < self.vmax
 

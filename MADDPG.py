@@ -187,25 +187,18 @@ class MADDPG:
         self.pv_replay_buffer = ReplayBuffer(buffer_size)
         self.storage_replay_buffer = ReplayBuffer(buffer_size)
 
-        self.voltage_violation_rates = []
-
-        self.all_time_pv_actions = []
-        self.all_time_en_p_actions = []
-        self.all_time_en_q_actions = []
-        self.alltime_pv_rewards = []
-        self.alltime_en_rewards = []
-
-    # def update(self):
-    #     if len(self.pv_replay_buffer) >= self.batch_size:
-    #         states, actions, rewards, next_states, dones = self.pv_replay_buffer.sample(self.batch_size)
-    #         self._update_agents(self.pv_agents, states, actions, rewards, next_states, dones)
-    #
-    #     if len(self.storage_replay_buffer) >= self.batch_size:
-    #         states, actions, rewards, next_states, dones = self.storage_replay_buffer.sample(self.batch_size)
-    #         self._update_agents(self.storage_agents, states, actions, rewards, next_states, dones)
-
-    #智能体共享缓冲区
-    #更新网络参数
+    #更新网络参数（智能体共享缓冲区）
+    """
+    更新网络参数：
+        从replay_buffer中取出数量为batch的数据
+        使用batch数据更新每个智能体
+        计算策略网络损失:
+            根据当前状态生成的动作，根据损失函数，计算在线策略网络的损失
+        计算价值网络损失：
+            根据在线网络计算的Q值和目标网络计算的Q值（贝尔曼方程）之间的差异，来计算在线价值网络的损失。
+        更新在线网络（通过损失函数）
+        更新目标网络（通过参数复制）
+    """
     def update(self):
         self._update_agents(self.pv_agents, self.pv_replay_buffer)
         self._update_agents(self.storage_agents, self.storage_replay_buffer)
@@ -213,10 +206,10 @@ class MADDPG:
     def _update_agents(self, agents, replay_buffer):
         if len(replay_buffer) < self.batch_size:
             return
-
+        # 从replay_buffer中取出数量为batch的数据
         batch = replay_buffer.sample(self.batch_size)
         states, actions, rewards, next_states, dones = batch
-
+        # 使用batch数据更新每个智能体
         for agent in agents:
             self._update_agent(agent, states, actions, rewards, next_states, dones)
 
@@ -231,7 +224,6 @@ class MADDPG:
         #计算价值网络的损失
         value_loss = self._compute_value_loss(agent, states, actions, rewards, next_states, dones)
 
-        #TODO:在论文中，把这里的更新步长变为N步
         #更新在线网络的参数（根据损失函数更新梯度）
         agent.policy_optimizer.zero_grad()
         policy_loss.backward()
@@ -258,9 +250,7 @@ class MADDPG:
             target_q = agent.target_value_net(next_states, next_actions)
             #done为1时，表示终止状态，目标Q值为即时奖励；否则，要考虑未来奖励
             # TODO:这里的rewards要考虑总体的rewards（论文中rewards的改变也是在这里体现）
-            # global_reward = -self.total_power_loss + self.beta * (self.sum_reward - rewards) + rewards
-            global_reward = -self.total_power_loss + self.beta * (self.sum_reward - rewards) + rewards
-            # print(f"global_reward {global_reward}, self_Reward: {rewards}, total_power_loss: {self.total_power_loss}" )
+            global_reward = -self.total_power_loss + self.beta * self.sum_reward + rewards
             target_q = global_reward + (1 - dones) * self.gamma * target_q
 
         # 计算当前Q值
@@ -276,72 +266,102 @@ class MADDPG:
         #创建配电网环境
         env = IEEE123bus(pp_net, pv_bus, es_bus)
         #初始化节点电压
-        voltage_data = []
-        # 初始化越限率
-        voltage_violation_rate = 1
+        alltime_voltage_data = []
+        alltime_pv_actions = []
+        alltime_es_p_actions = []
+        alltime_es_q_actions = []
+        alltime_pv_rewards = []
+        alltime_es_rewards = []
+        voltage_violation_rates = []
+
         # 初始化缓冲区
         self._initialize_replay_buffer(env)
         # 初始化环境（每个智能体的状态和总奖励）
-        state_pv = env.reset_pv()
-        state_storage = env.reset_storage()
+        state_pv, state_storage = env.reset_agent()
+
+        """
+        每个episode：
+            根据状态获得动作
+            执行动作
+            潮流计算，得出下一个状态
+            计算奖励
+            放入经验池
+            计算全局奖励
+            从经验池采样来更新网络参数
+        """
         for episode in range(num_episodes):
             #根据当前状态获得每个智能体的动作
             actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
             actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
-            # 记录动作数据
-            self.all_time_pv_actions.append(actions_pv)
-            np_actions_storage = np.array(actions_storage)
-            self.all_time_en_p_actions.append(np_actions_storage[:,0])
-            self.all_time_en_q_actions.append(np_actions_storage[:,1])
+
             #根据动作获得每个智能体的下一个状态和奖励（潮流计算）
-            #TODO: 这里的先后顺序是否有影响？
-            next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
-            next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
-            # 记录奖励数据（单个）
-            self.alltime_pv_rewards.append(rewards_pv)
-            self.alltime_en_rewards.append(rewards_storage)
+            (next_state_pv, rewards_pv, done_pv,
+             next_state_storage, rewards_storage, done_storage) = env.step_agent(actions_pv, actions_storage)
+
             #将数据放入缓冲区
             for i, agent in enumerate(self.pv_agents):
                 self.pv_replay_buffer.add(state_pv[i], actions_pv[i], rewards_pv[i], next_state_pv[i], done_pv[i])
             for i, agent in enumerate(self.storage_agents):
                 self.storage_replay_buffer.add(state_storage[i], actions_storage[i], rewards_storage[i],
                                                next_state_storage[i], done_storage[i])
+
+            """Record data"""
+            # 动作数据
+            alltime_pv_actions.append(actions_pv)
+            np_actions_storage = np.array(actions_storage)
+            alltime_es_p_actions.append(np_actions_storage[:, 0])
+            alltime_es_q_actions.append(np_actions_storage[:, 1])
+            # 单步奖励
+            alltime_pv_rewards.append(rewards_pv)
+            alltime_es_rewards.append(rewards_storage)
+            # 计算功率损耗（所有线路的有功损耗 + 无功损耗）(标幺值)
+            self.total_power_loss = (env.network.res_line.pl_mw.sum()
+                                     + env.network.res_line.ql_mvar.sum()) / env.network.sn_mva
+            # 电压数据
+            self.voltage = env.network.res_bus.vm_pu.to_numpy()
+            alltime_voltage_data.append(self.voltage)
+            # 计算电压越限率
+            violations = np.logical_or(self.voltage < 0.95, self.voltage > 1.05)  # 计算越限节点的数量
+            num_violations = np.sum(violations)  # 计算超出范围的节点数量
+            voltage_violation_rate = num_violations / len(self.voltage)
+            voltage_violation_rates.append(voltage_violation_rate)
+            """End record data"""
+
+            """计算全局奖励"""
+            # 每执行完一次动作，计算一次全局奖励，即所有电压的越限程度
+            voltage = np.array(self.voltage)
+            # 对于低于下限的电压，计算为 lower_limit - voltage
+            low_voltage_violations = np.maximum(0.95 - voltage, 0)
+            # 对于高于上限的电压，计算为 voltage - upper_limit
+            high_voltage_violations = np.maximum(voltage - 1.05, 0)
+            # 计算总的电压越限程度
+            voltage_violations = sum(low_voltage_violations) + sum(high_voltage_violations)
+            self.sum_reward =  -voltage_violations * 100
+            """End 计算全局奖励"""
+
             #更新状态
             state_pv = next_state_pv
             state_storage = next_state_storage
 
-            # 计算每个智能体奖励之和
-            self.sum_reward = sum(rewards_pv) + sum(rewards_storage)
-            # 计算功率损耗（所有线路的有功损耗 + 无功损耗）(标幺值)
-            self.total_power_loss = (env.network.res_line.pl_mw.sum() + env.network.res_line.ql_mvar.sum()) / env.network.sn_mva
-            # 记录电压数据
-            voltage = env.network.res_bus.vm_pu.to_numpy()
-            voltage_data.append(voltage)
-            # 计算电压越限率
-            violations = np.logical_or(voltage < 0.95, voltage > 1.05) # 计算越限节点的数量
-            num_violations = np.sum(violations)  # 计算超出范围的节点数量
-            voltage_violation_rate = num_violations / len(voltage)
-            self.voltage_violation_rates.append(voltage_violation_rate)
             #更新网络参数
             self.update()
             print(f"episode: {episode}, voltage_violation_rate {voltage_violation_rate}, sum_Reward: {self.sum_reward}")
             # 打包数据
         result = (
-            voltage_data,
-            self.voltage_violation_rates,
-            self.alltime_pv_rewards,
-            self.alltime_en_rewards,
-            self.all_time_pv_actions,
-            self.all_time_en_p_actions,
-            self.all_time_en_q_actions,
+            alltime_voltage_data,
+            voltage_violation_rates,
+            alltime_pv_rewards,
+            alltime_es_rewards,
+            alltime_pv_actions,
+            alltime_es_p_actions,
+            alltime_es_q_actions,
         )
         return result
 
     def _initialize_replay_buffer(self, env, num_initial_steps=100, epsilon=1.0):
         """使用随机策略初始化缓冲区"""
         for _ in range(num_initial_steps):
-            state_pv = env.reset_pv()
-            state_storage = env.reset_storage()
+            state_pv, state_storage = env.reset_agent()
 
             max_steps = 10
             step_count = 0
@@ -351,8 +371,8 @@ class MADDPG:
                 actions_storage = [agent.get_action(state_storage[i], epsilon) for i, agent in
                                    enumerate(self.storage_agents)]
 
-                next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
-                next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
+                (next_state_pv, rewards_pv, done_pv,
+                 next_state_storage, rewards_storage, done_storage) = env.step_agent(actions_pv, actions_storage)
 
                 for i, agent in enumerate(self.pv_agents):
                     self.pv_replay_buffer.add(state_pv[i], actions_pv[i], rewards_pv[i], next_state_pv[i], done_pv[i])
@@ -362,6 +382,7 @@ class MADDPG:
 
                 state_pv = next_state_pv
                 state_storage = next_state_storage
+        # print(f"replay_buffer initialized, pv_replay_buffer size: {len(self.pv_replay_buffer)}, es_replay_buffer size: {len(self.storage_replay_buffer)}")
 
     def save_model(self, directory):
         for i, agent in enumerate(self.pv_agents):
@@ -381,46 +402,46 @@ class MADDPG:
             agent.policy_net.load_state_dict(torch.load(f"{directory}/storage_agent_{i}_policy.pth"))
             agent.value_net.load_state_dict(torch.load(f"{directory}/storage_agent_{i}_value.pth"))
 
-    #TODO:这个函数是否有必要
-    def online_train(self, num_steps, pp_net, pv_bus, es_bus):
-        env = IEEE123bus(pp_net, pv_bus, es_bus)
-        voltage_data = []
-        voltage_violation_rates = []
-
-        state_pv = env.reset_pv()
-        state_storage = env.reset_storage()
-
-        for step in range(num_steps):
-            actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
-            actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
-
-            next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
-            next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
-
-            for i, agent in enumerate(self.pv_agents):
-                self.pv_replay_buffer.add(state_pv[i], actions_pv[i], rewards_pv[i], next_state_pv[i], done_pv[i])
-            for i, agent in enumerate(self.storage_agents):
-                self.storage_replay_buffer.add(state_storage[i], actions_storage[i], rewards_storage[i],
-                                               next_state_storage[i], done_storage[i])
-
-            state_pv = next_state_pv
-            state_storage = next_state_storage
-
-            # 实时更新
-            self.update()
-
-            # 记录电压数据并计算电压越限率
-            voltage = env.network.res_bus.vm_pu.to_numpy()
-            voltage_data.append(voltage)
-            # 计算电压越限率
-            combined = np.concatenate((done_pv, done_storage))  # 合并两个数组
-            count_ones = np.sum(combined)  # 统计值为 1 的数量（没有越限的智能体的数量）
-            voltage_violation_rate = 1 - count_ones / len(combined)  # 计算越限率
-            voltage_violation_rates.append(voltage_violation_rate)
-
-            print(f"Step {step + 1}, Voltage Limit Exceedance Rate: {voltage_violation_rate}")
-            # 定期保存模型
-            # if (step + 1) % 100 == 0:
-            #     self.save_model('online_model_directory')
-        return voltage_data, voltage_violation_rates
-
+    # #TODO:这个函数是否有必要
+    # def online_train(self, num_steps, pp_net, pv_bus, es_bus):
+    #     env = IEEE123bus(pp_net, pv_bus, es_bus)
+    #     voltage_data = []
+    #     voltage_violation_rates = []
+    #
+    #     state_pv = env.reset_pv()
+    #     state_storage = env.reset_storage()
+    #
+    #     for step in range(num_steps):
+    #         actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
+    #         actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
+    #
+    #         next_state_pv, rewards_pv, done_pv = env.step_pv(actions_pv)
+    #         next_state_storage, rewards_storage, done_storage = env.step_storage(actions_storage)
+    #
+    #         for i, agent in enumerate(self.pv_agents):
+    #             self.pv_replay_buffer.add(state_pv[i], actions_pv[i], rewards_pv[i], next_state_pv[i], done_pv[i])
+    #         for i, agent in enumerate(self.storage_agents):
+    #             self.storage_replay_buffer.add(state_storage[i], actions_storage[i], rewards_storage[i],
+    #                                            next_state_storage[i], done_storage[i])
+    #
+    #         state_pv = next_state_pv
+    #         state_storage = next_state_storage
+    #
+    #         # 实时更新
+    #         self.update()
+    #
+    #         # 记录电压数据并计算电压越限率
+    #         voltage = env.network.res_bus.vm_pu.to_numpy()
+    #         voltage_data.append(voltage)
+    #         # 计算电压越限率
+    #         combined = np.concatenate((done_pv, done_storage))  # 合并两个数组
+    #         count_ones = np.sum(combined)  # 统计值为 1 的数量（没有越限的智能体的数量）
+    #         voltage_violation_rate = 1 - count_ones / len(combined)  # 计算越限率
+    #         voltage_violation_rates.append(voltage_violation_rate)
+    #
+    #         print(f"Step {step + 1}, Voltage Limit Exceedance Rate: {voltage_violation_rate}")
+    #         # 定期保存模型
+    #         # if (step + 1) % 100 == 0:
+    #         #     self.save_model('online_model_directory')
+    #     return voltage_data, voltage_violation_rates
+    #
