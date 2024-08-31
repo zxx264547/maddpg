@@ -5,11 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="92a1e79d-f6ea-4c3c-a5b9-f3dd4061fc70" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/maddpg.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/maddpg.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/MADDPG.py" beforeDir="false" afterPath="$PROJECT_DIR$/MADDPG.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/env_single_phase_123bus.py" beforeDir="false" afterPath="$PROJECT_DIR$/env_single_phase_123bus.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ieee123bus_env.py" beforeDir="false" afterPath="$PROJECT_DIR$/ieee123bus_env.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/my_train_maddpg.py" beforeDir="false" afterPath="$PROJECT_DIR$/my_train_maddpg.py" afterDir="false" />
     </list>
@@ -35,12 +32,13 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "Python.MADDPG.executor": "Run",
+    "Python.ieee123bus_env.executor": "Run",
     "Python.my_train_maddpg.executor": "Run",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/Administrator/Desktop/maddpg",
+    "last_opened_file_path": "C:/Users/Administrator/Desktop/maddpg/my_train_maddpg.py",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
 }]]></component>
@@ -56,8 +54,8 @@
     </key>
   </component>
   <component name="RunManager">
-    <configuration name="env_single_phase_123bus" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="Stable-DDPG-for-voltage-control-main" />
+    <configuration name="my_train_maddpg" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="maddpg" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -65,11 +63,12 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/Stable-DDPG-for-voltage-control-main" />
-      <option name="IS_MODULE_SDK" value="true" />
+      <option name="SDK_NAME" value="Python 3.12 (maddpg)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Stable-DDPG-for-voltage-control-main/env_single_phase_123bus.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/my_train_maddpg.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -78,11 +77,6 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <recent_temporary>
-      <list>
-        <item itemvalue="Python.env_single_phase_123bus" />
-      </list>
-    </recent_temporary>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>

@@ -54,7 +54,7 @@ maddpg = MADDPG(pv_params, storage_params, pv_buses, es_buses, gamma=0.99, beta=
 maddpg.load_model('model_directory')
 
 # 在线训练模型并记录电压数据
-voltage_data, over_limit_rates = maddpg.train(num_episodes=1000, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)
+voltage_data, over_limit_rates, alltime_voltage_values, alltime_pv_rewards, alltime_en_rewards, all_time_pv_actions, all_time_en_p_actions, all_time_en_q_actions = maddpg.train(num_episodes=1000, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)
 
 
 # 绘制电压越限率随时间的变化
@@ -64,4 +64,89 @@ plt.xlabel('Step')
 plt.ylabel('Over Limit Rate')
 plt.title('Voltage Limit Exceedance Rate Over Time')
 plt.legend()
+plt.show()
+
+alltime_voltage_values = np.array(alltime_voltage_values)
+alltime_pv_rewards = np.array(alltime_pv_rewards)
+alltime_en_rewards = np.array(alltime_en_rewards)
+alltime_pv_actions = np.array(all_time_pv_actions)
+alltime_en_p_actions = np.array(all_time_en_p_actions)
+alltime_en_q_actions = np.array(all_time_en_q_actions)
+# 选择要绘图的节点索引 (如第3个节点)
+node_index = 2  # 假设我们选择第 3 个节点，Python 索引从 0 开始
+# 提取该节点在所有 step 的电压变化
+node_voltage_over_time = alltime_voltage_values[node_index, :]
+# 生成 step 数组（横轴）
+steps = range(alltime_voltage_values.shape[1])
+# 绘制电压变化曲线
+plt.figure(figsize=(10, 6))
+plt.plot(steps, node_voltage_over_time, label=f'Node {node_index + 1} Voltage')
+plt.xlabel('Step')
+plt.ylabel('Voltage (p.u.)')
+plt.title(f'Voltage Change for Node {node_index + 1} Over Time')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# 获取 step 和 PV 节点的数量
+num_steps = alltime_pv_actions.shape[0]
+num_pv_nodes = alltime_pv_actions.shape[1]
+
+# 生成 step 数组（横轴）
+steps = range(num_steps)
+
+# 绘制所有 PV 节点的动作变化
+plt.figure(figsize=(10, 6))
+
+# 遍历每个 PV 节点，绘制其动作变化曲线
+for pv_index in range(num_pv_nodes):
+    pv_actions_over_time = alltime_pv_actions[:, pv_index]  # 提取第 pv_index 列的数据
+    plt.plot(steps, pv_actions_over_time, label=f'PV Node {pv_index + 1}')
+
+# 添加图例、标题和标签
+plt.xlabel('Step')
+plt.ylabel('Action Value')
+plt.title('PV Node Actions Over Time')
+plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+plt.grid(True)
+plt.show()
+
+# 获取 step 和 en 节点的数量
+num_steps = alltime_en_p_actions.shape[0]
+num_en_nodes = alltime_en_p_actions.shape[1]
+
+# 生成 step 数组（横轴）
+steps = range(num_steps)
+
+# 绘制所有 PV 节点的动作变化
+plt.figure(figsize=(10, 6))
+
+# 遍历每个 PV 节点，绘制其动作变化曲线
+for en_index in range(num_en_nodes):
+    en_p_actions_over_time = alltime_en_p_actions[:, en_index]  # 提取第 pv_index 列的数据
+    plt.plot(steps, en_p_actions_over_time, label=f'PV Node {en_index + 1}')
+
+# 添加图例、标题和标签
+plt.xlabel('Step')
+plt.ylabel('Action Value')
+plt.title('en Node p Actions Over Time')
+plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+plt.grid(True)
+plt.show()
+
+
+# 绘制所有 PV 节点的动作变化
+plt.figure(figsize=(10, 6))
+
+# 遍历每个 PV 节点，绘制其动作变化曲线
+for en_index in range(num_en_nodes):
+    en_q_actions_over_time = alltime_en_q_actions[:, en_index]  # 提取第 pv_index 列的数据
+    plt.plot(steps, en_q_actions_over_time, label=f'PV Node {en_index + 1}')
+
+# 添加图例、标题和标签
+plt.xlabel('Step')
+plt.ylabel('Action Value')
+plt.title('en Node q Actions Over Time')
+plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+plt.grid(True)
 plt.show()

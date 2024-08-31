@@ -25,6 +25,10 @@ class IEEE123bus(gym.Env):
         self.vmax = vmax
         self.vmin = vmin
 
+        self.alltime_voltage_values = []
+        self.alltime_py_rewards = []
+        self.alltime_en_rewards = []
+
         # # 定义光伏智能体的状态空间和动作空间
         # #TODO：这里的动作空间是归一化的值还是实际值好一点？
         # self.pv_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
@@ -59,16 +63,16 @@ class IEEE123bus(gym.Env):
         except pp.powerflow.LoadflowNotConverged:
             print("Power flow for PV did not converge")
             return next_states, rewards, [True] * len(self.pv_buses)  # 终止当前回合
+        all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
         for i, bus in enumerate(self.pv_buses):
             next_state = self._get_state('pv', bus)
             # 得到所有节点电压，用于计算单个智能体的reward
-            all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
             reward = self._calculate_reward(all_voltage_values)
-
             done = self._check_done(next_state, 'pv')
             next_states.append(next_state)
             rewards.append(reward)
             dones.append(done)
+
         return next_states, rewards, dones
 
     def step_storage(self, actions):
@@ -82,14 +86,17 @@ class IEEE123bus(gym.Env):
         except pp.powerflow.LoadflowNotConverged:
             print("Power flow for storage did not converge")
             return next_states, rewards, [True] * len(self.es_buses)  # 终止当前回合
+        all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
+        # 记录各个节点电压变化
+        self.alltime_voltage_values.append(all_voltage_values)
         for i, bus in enumerate(self.es_buses):
             next_state = self._get_state('storage', bus)
-            all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
             reward = self._calculate_reward(all_voltage_values)
             done = self._check_done(next_state, 'storage')
             next_states.append(next_state)
             rewards.append(reward)
             dones.append(done)
+
         return next_states, rewards, dones
 
     def _get_initial_state(self, agent_type, buses):
