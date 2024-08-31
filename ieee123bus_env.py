@@ -61,7 +61,10 @@ class IEEE123bus(gym.Env):
             return next_states, rewards, [True] * len(self.pv_buses)  # 终止当前回合
         for i, bus in enumerate(self.pv_buses):
             next_state = self._get_state('pv', bus)
-            reward = self._calculate_reward(next_state, 'pv')
+            # 得到所有节点电压，用于计算单个智能体的reward
+            all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
+            reward = self._calculate_reward(all_voltage_values)
+
             done = self._check_done(next_state, 'pv')
             next_states.append(next_state)
             rewards.append(reward)
@@ -81,7 +84,8 @@ class IEEE123bus(gym.Env):
             return next_states, rewards, [True] * len(self.es_buses)  # 终止当前回合
         for i, bus in enumerate(self.es_buses):
             next_state = self._get_state('storage', bus)
-            reward = self._calculate_reward(next_state, 'storage')
+            all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
+            reward = self._calculate_reward(all_voltage_values)
             done = self._check_done(next_state, 'storage')
             next_states.append(next_state)
             rewards.append(reward)
@@ -143,11 +147,17 @@ class IEEE123bus(gym.Env):
                 print(f"Warning: Bus {bus} not found in storage")
 
     # TODO:计算单个智能体的奖励
-    def _calculate_reward(self, state, agent_type):
-        voltage = state[-1]
-        reward = -abs(voltage - 1.0)  # 以电压偏离1.0的绝对值为负奖励
-        if voltage < self.vmin or voltage > self.vmax:
-            reward -= 1.0  # 如果电压超出范围，给予额外的负奖励
+    def _calculate_reward(self, voltage_values):
+        # 计算越限程度：距离上下限的差值
+        # 对于低于下限的电压，计算为 lower_limit - voltage
+        low_voltage_violations = np.maximum(self.vmin - voltage_values, 0)
+        # 对于高于上限的电压，计算为 voltage - upper_limit
+        high_voltage_violations = np.maximum(voltage_values - self.vmax, 0)
+        # 计算总的电压越限程度
+        voltage_violations = low_voltage_violations + high_voltage_violations
+        # 定义奖励函数
+        # 将电压越限的总程度转换为负奖励，越限越严重，奖励越低
+        reward = -np.sum(voltage_violations) * 10
         return reward
 
     def _check_done(self, state, agent_type):

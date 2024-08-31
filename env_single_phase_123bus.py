@@ -227,7 +227,7 @@ def create_123bus():
     pp_net.sgen['p_mw'] = 0.0
     pp_net.sgen['q_mvar'] = 0.0
 
-    pp.create_sgen(pp_net, 9, p_mw = 1.5, q_mvar=0)
+    pp.create_sgen(pp_net, 9, p_mw = 1, q_mvar=0)
     pp.create_sgen(pp_net, 10, p_mw = 1, q_mvar=0)
     pp.create_sgen(pp_net, 15, p_mw = 1, q_mvar=0)
     pp.create_sgen(pp_net, 19, p_mw = 1, q_mvar=0)
@@ -240,7 +240,6 @@ def create_123bus():
     pp.create_sgen(pp_net, 82, p_mw = 1, q_mvar=0)
     pp.create_sgen(pp_net, 91, p_mw = 1, q_mvar=0)
     pp.create_sgen(pp_net, 103, p_mw = 1, q_mvar=0)
-    pp.create_sgen(pp_net, 60, p_mw = 1, q_mvar=0) #node 114 in the png
 
 
 
@@ -249,10 +248,10 @@ def create_123bus():
     pp.create_storage(pp_net, bus=30, p_mw=0.8, max_e_mwh=3.0, soc_percent=50, min_e_mwh=0, q_mvar=0.2)
     pp.create_storage(pp_net, bus=40, p_mw=0.6, max_e_mwh=2.5, soc_percent=50, min_e_mwh=0, q_mvar=0.15)
 
-    #only for reset
-    pp.create_sgen(pp_net, 13, p_mw = 1, q_mvar=0)
-    pp.create_sgen(pp_net, 14, p_mw = 1, q_mvar=0)
-    pp.create_sgen(pp_net, 18, p_mw = 1, q_mvar=0)
+    # #only for reset
+    # pp.create_sgen(pp_net, 13, p_mw = 1, q_mvar=0)
+    # pp.create_sgen(pp_net, 14, p_mw = 1, q_mvar=0)
+    # pp.create_sgen(pp_net, 18, p_mw = 1, q_mvar=0)
 
     return pp_net
 
