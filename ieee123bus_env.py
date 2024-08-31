@@ -25,10 +25,6 @@ class IEEE123bus(gym.Env):
         self.vmax = vmax
         self.vmin = vmin
 
-        self.alltime_voltage_values = []
-        self.alltime_py_rewards = []
-        self.alltime_en_rewards = []
-
         # # 定义光伏智能体的状态空间和动作空间
         # #TODO：这里的动作空间是归一化的值还是实际值好一点？
         # self.pv_state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
@@ -87,8 +83,6 @@ class IEEE123bus(gym.Env):
             print("Power flow for storage did not converge")
             return next_states, rewards, [True] * len(self.es_buses)  # 终止当前回合
         all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
-        # 记录各个节点电压变化
-        self.alltime_voltage_values.append(all_voltage_values)
         for i, bus in enumerate(self.es_buses):
             next_state = self._get_state('storage', bus)
             reward = self._calculate_reward(all_voltage_values)

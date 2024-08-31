@@ -258,6 +258,7 @@ class MADDPG:
             target_q = agent.target_value_net(next_states, next_actions)
             #done为1时，表示终止状态，目标Q值为即时奖励；否则，要考虑未来奖励
             # TODO:这里的rewards要考虑总体的rewards（论文中rewards的改变也是在这里体现）
+            # global_reward = -self.total_power_loss + self.beta * (self.sum_reward - rewards) + rewards
             global_reward = -self.total_power_loss + self.beta * (self.sum_reward - rewards) + rewards
             # print(f"global_reward {global_reward}, self_Reward: {rewards}, total_power_loss: {self.total_power_loss}" )
             target_q = global_reward + (1 - dones) * self.gamma * target_q
@@ -280,13 +281,10 @@ class MADDPG:
         voltage_violation_rate = 1
         # 初始化缓冲区
         self._initialize_replay_buffer(env)
-
+        # 初始化环境（每个智能体的状态和总奖励）
+        state_pv = env.reset_pv()
+        state_storage = env.reset_storage()
         for episode in range(num_episodes):
-            #初始化环境（每个智能体的状态和总奖励）
-            state_pv = env.reset_pv()
-            state_storage = env.reset_storage()
-
-
             #根据当前状态获得每个智能体的动作
             actions_pv = [agent.get_action(state_pv[i]) for i, agent in enumerate(self.pv_agents)]
             actions_storage = [agent.get_action(state_storage[i]) for i, agent in enumerate(self.storage_agents)]
@@ -326,8 +324,18 @@ class MADDPG:
             self.voltage_violation_rates.append(voltage_violation_rate)
             #更新网络参数
             self.update()
-            print(f"voltage_violation_rate {voltage_violation_rate}, sum_Reward: {self.sum_reward}")
-        return voltage_data, self.voltage_violation_rates, env.alltime_voltage_values, self.alltime_pv_rewards, self.alltime_en_rewards, self.all_time_pv_actions, self.all_time_en_p_actions, self.all_time_en_q_actions
+            print(f"episode: {episode}, voltage_violation_rate {voltage_violation_rate}, sum_Reward: {self.sum_reward}")
+            # 打包数据
+        result = (
+            voltage_data,
+            self.voltage_violation_rates,
+            self.alltime_pv_rewards,
+            self.alltime_en_rewards,
+            self.all_time_pv_actions,
+            self.all_time_en_p_actions,
+            self.all_time_en_q_actions,
+        )
+        return result
 
     def _initialize_replay_buffer(self, env, num_initial_steps=100, epsilon=1.0):
         """使用随机策略初始化缓冲区"""
