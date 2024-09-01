@@ -167,10 +167,10 @@ elif (FLAG ==1):
     #     agent_list[i].value_net.load_state_dict(valuenet_dict)
     #     agent_list[i].policy_net.load_state_dict(policynet_dict) 
     #     for target_param, param in zip(agent_list[i].target_value_net.parameters(), agent_list[i].value_net.parameters()):
-    #         target_param.data.copy_(param.data)
+    #         target_param.fakedata.copy_(param.fakedata)
 
     #     for target_param, param in zip(agent_list[i].target_policy_net.parameters(), agent_list[i].policy_net.parameters()):
-    #         target_param.data.copy_(param.data)
+    #         target_param.fakedata.copy_(param.fakedata)
 
     if args.algorithm == 'safe-ddpg':
         num_episodes = 200    #13-3p

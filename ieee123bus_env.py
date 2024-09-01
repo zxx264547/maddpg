@@ -57,7 +57,7 @@ class IEEE123bus(gym.Env):
         for i, bus in enumerate(self.es_buses):
             self._apply_action(es_actions[i], 'storage', bus)
         try:
-            pp.runpp(self.network, max_iteration=50)
+            pp.runpp(self.network, max_iteration=500)
         except pp.powerflow.LoadflowNotConverged:
             print("Power flow for PV did not converge")
             return pv_next_states, pv_rewards, [True] * len(self.pv_buses), es_next_states, es_rewards, [True] * len(self.es_buses),  # 终止当前回合
@@ -144,7 +144,7 @@ class IEEE123bus(gym.Env):
         high_voltage_violations = np.maximum(voltage - self.vmax, 0)
         # 计算总的电压越限程度
         voltage_violations = low_voltage_violations + high_voltage_violations
-        reward = -voltage_violations * 1000
+        reward = -voltage_violations * 100
         # reward是一个标量
         return reward
 

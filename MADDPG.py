@@ -219,19 +219,26 @@ class MADDPG:
         rewards = torch.FloatTensor(rewards).unsqueeze(1).to(agent.device)
         next_states = torch.FloatTensor(next_states).to(agent.device)
         dones = torch.FloatTensor(dones).unsqueeze(1).to(agent.device)
-        #计算策略网络的损失
-        policy_loss = self._compute_policy_loss(agent, states)
-        #计算价值网络的损失
-        value_loss = self._compute_value_loss(agent, states, actions, rewards, next_states, dones)
 
-        #更新在线网络的参数（根据损失函数更新梯度）
+        # 计算策略损失并优化策略网络
+        policy_loss = self._compute_policy_loss(agent, states)
         agent.policy_optimizer.zero_grad()
         policy_loss.backward()
         agent.policy_optimizer.step()
 
+        # 计算价值损失并优化价值网络
+        #TODO:此时的action应该是在线actor网络根据当前状态计算出来的，还是从采样池里采样出来的
+
+        # # 通过在线网络计算action
+        # policy_actions = policy_actions.detach().numpy()
+        # actions = torch.FloatTensor(policy_actions).to(agent.device)
+        value_loss = self._compute_value_loss(agent, states, actions, rewards, next_states, dones)
+        # 通过采样得到action
+        # value_loss = self._compute_value_loss(agent, states, actions, rewards, next_states, dones)
         agent.value_optimizer.zero_grad()
         value_loss.backward()
         agent.value_optimizer.step()
+
         #更新目标网络的参数
         agent.update_target_networks(self.tau)
 
@@ -249,14 +256,11 @@ class MADDPG:
             next_actions = agent.target_policy_net(next_states)
             target_q = agent.target_value_net(next_states, next_actions)
             #done为1时，表示终止状态，目标Q值为即时奖励；否则，要考虑未来奖励
-            # TODO:这里的rewards要考虑总体的rewards（论文中rewards的改变也是在这里体现）
-            global_reward = -self.total_power_loss + self.beta * self.sum_reward + rewards
-            target_q = global_reward + (1 - dones) * self.gamma * target_q
-
+            target_q = rewards + (1 - dones) * self.gamma * target_q
+            # target_q = rewards + self.gamma * target_q
         # 计算当前Q值
-        #TODO:此时的action应该是在线actor网络根据当前状态计算出来的，还是从采样池里采样出来的(目前的方案里面是采样池中的)
-        current_q = agent.value_net(states, actions)
 
+        current_q = agent.value_net(states, actions)
         # 计算价值网络的损失
         value_loss = agent.value_criterion(current_q, target_q)
 
@@ -272,7 +276,9 @@ class MADDPG:
         alltime_es_q_actions = []
         alltime_pv_rewards = []
         alltime_es_rewards = []
+        alltime_power_loss = []
         voltage_violation_rates = []
+
 
         # 初始化缓冲区
         self._initialize_replay_buffer(env)
@@ -298,14 +304,7 @@ class MADDPG:
             (next_state_pv, rewards_pv, done_pv,
              next_state_storage, rewards_storage, done_storage) = env.step_agent(actions_pv, actions_storage)
 
-            #将数据放入缓冲区
-            for i, agent in enumerate(self.pv_agents):
-                self.pv_replay_buffer.add(state_pv[i], actions_pv[i], rewards_pv[i], next_state_pv[i], done_pv[i])
-            for i, agent in enumerate(self.storage_agents):
-                self.storage_replay_buffer.add(state_storage[i], actions_storage[i], rewards_storage[i],
-                                               next_state_storage[i], done_storage[i])
-
-            """Record data"""
+            """Record fakedata"""
             # 动作数据
             alltime_pv_actions.append(actions_pv)
             np_actions_storage = np.array(actions_storage)
@@ -315,29 +314,43 @@ class MADDPG:
             alltime_pv_rewards.append(rewards_pv)
             alltime_es_rewards.append(rewards_storage)
             # 计算功率损耗（所有线路的有功损耗 + 无功损耗）(标幺值)
-            self.total_power_loss = (env.network.res_line.pl_mw.sum()
-                                     + env.network.res_line.ql_mvar.sum()) / env.network.sn_mva
+            total_power_loss = ((env.network.res_line.pl_mw.sum()
+                                     + env.network.res_line.ql_mvar.sum()) / env.network.sn_mva) * 0.1
+            alltime_power_loss.append(total_power_loss)
             # 电压数据
-            self.voltage = env.network.res_bus.vm_pu.to_numpy()
-            alltime_voltage_data.append(self.voltage)
+            voltage = env.network.res_bus.vm_pu.to_numpy()
+            alltime_voltage_data.append(voltage)
             # 计算电压越限率
-            violations = np.logical_or(self.voltage < 0.95, self.voltage > 1.05)  # 计算越限节点的数量
+            violations = np.logical_or(voltage < 0.95, voltage > 1.05)  # 计算越限节点的数量
             num_violations = np.sum(violations)  # 计算超出范围的节点数量
-            voltage_violation_rate = num_violations / len(self.voltage)
+            voltage_violation_rate = num_violations / len(voltage)
             voltage_violation_rates.append(voltage_violation_rate)
-            """End record data"""
+            """End record fakedata"""
 
             """计算全局奖励"""
             # 每执行完一次动作，计算一次全局奖励，即所有电压的越限程度
-            voltage = np.array(self.voltage)
+            voltage = np.array(voltage)
             # 对于低于下限的电压，计算为 lower_limit - voltage
             low_voltage_violations = np.maximum(0.95 - voltage, 0)
             # 对于高于上限的电压，计算为 voltage - upper_limit
             high_voltage_violations = np.maximum(voltage - 1.05, 0)
             # 计算总的电压越限程度
             voltage_violations = sum(low_voltage_violations) + sum(high_voltage_violations)
-            self.sum_reward =  -voltage_violations * 100
+            sum_reward = -voltage_violations * 100
+
+            # TODO:这里的rewards要考虑总体的rewards（论文中rewards的改变也是在这里体现）
+            global_reward_pv = self.beta * sum_reward + rewards_pv - total_power_loss
+            global_reward_es = self.beta * sum_reward + rewards_storage - total_power_loss
+            # print(f"global_reward = {global_reward_pv, global_reward_es}, total_power_loss = {total_power_loss},"
+            #       f"sum_reward = {sum_reward}, rewards = {rewards_pv, rewards_storage} ")
             """End 计算全局奖励"""
+
+            #将数据放入缓冲区
+            for i, agent in enumerate(self.pv_agents):
+                self.pv_replay_buffer.add(state_pv[i], actions_pv[i], global_reward_pv[i], next_state_pv[i], done_pv[i])
+            for i, agent in enumerate(self.storage_agents):
+                self.storage_replay_buffer.add(state_storage[i], actions_storage[i], global_reward_es[i],
+                                               next_state_storage[i], done_storage[i])
 
             #更新状态
             state_pv = next_state_pv
@@ -345,7 +358,8 @@ class MADDPG:
 
             #更新网络参数
             self.update()
-            print(f"episode: {episode}, voltage_violation_rate {voltage_violation_rate}, sum_Reward: {self.sum_reward}")
+            print(f"episode: {episode}, voltage_violation_rate {voltage_violation_rate}, "
+                  f"sum_reward :{sum_reward}")
             # 打包数据
         result = (
             alltime_voltage_data,
@@ -357,6 +371,7 @@ class MADDPG:
             alltime_es_q_actions,
         )
         return result
+
 
     def _initialize_replay_buffer(self, env, num_initial_steps=100, epsilon=1.0):
         """使用随机策略初始化缓冲区"""

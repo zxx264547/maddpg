@@ -14,7 +14,7 @@ def create_123bus(pv_buses, es_buses):
 
     for bus in pv_buses:
         if bus in pp_net.bus.index:
-            pp.create_sgen(pp_net, bus, p_mw=1.0, q_mvar=0.0)
+            pp.create_sgen(pp_net, bus, p_mw=1.0, q_mvar=1.0)
         else:
             print(f"  Warning: Bus {bus} not found in network bus index")
 
@@ -28,8 +28,8 @@ def create_123bus(pv_buses, es_buses):
 
 
 # 定义 PV 和 ES 节点
-pv_buses = np.array([13, 14, 23, 24, 33, 37, 39, 46, 48, 66, 76, 77, 92, 108]) - 1
-es_buses = np.array([20, 47, 108]) - 1
+pv_buses = np.array([39, 47, 60]) - 1
+es_buses = np.array([4, 85, 114]) - 1
 
 # 创建 Pandapower 网络对象
 pp_net = create_123bus(pv_buses, es_buses)
@@ -39,10 +39,10 @@ pv_params = (5, 1, 64)  # 观测维度，动作维度，隐藏层维度
 storage_params = (5, 2, 64)  # 观测维度，动作维度，隐藏层维度
 
 # 创建 MADDPG 实例
-maddpg = MADDPG(pv_params, storage_params, pv_buses, es_buses, gamma=0.9, beta=0.01, tau=0.01, buffer_size=100000, batch_size=64)
+maddpg = MADDPG(pv_params, storage_params, pv_buses, es_buses, gamma=0.9, beta=0.9, tau=0.01, buffer_size=100000, batch_size=64)
 
 # 训练模型并记录电压数据
-result = maddpg.train(num_episodes=500, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)
+result = maddpg.train(num_episodes=1000, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)
 # 保存模型
 maddpg.save_model('model_directory')
 
