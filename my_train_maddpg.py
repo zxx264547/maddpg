@@ -42,7 +42,7 @@ storage_params = (5, 2, 64)  # 观测维度，动作维度，隐藏层维度
 maddpg = MADDPG(pv_params, storage_params, pv_buses, es_buses, gamma=0.9, beta=0.9, tau=0.01, buffer_size=100000, batch_size=64)
 
 # 训练模型并记录电压数据
-result = maddpg.train(num_episodes=1000, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)
+result = maddpg.train(num_episodes=10000, pp_net=pp_net, pv_bus=pv_buses, es_bus=es_buses)
 # 保存模型
 maddpg.save_model('model_directory')
 
