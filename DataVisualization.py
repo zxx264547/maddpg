@@ -25,17 +25,19 @@ class DataPlot:
         plt.title('Voltage Change for Selected Nodes Over Time')
         plt.legend()
         plt.grid(True)
+        plt.savefig('picture/节点电压变化.png')  # 保存图片
         plt.show()
 
     @classmethod
-    def voltage_violation_rates_step(cls, voltage_violation_rates):
+    def voltage_violations_step(cls, voltage_violations):
         # 绘制电压越限率随时间的变化
         plt.figure(figsize=(10, 5))
-        plt.plot(voltage_violation_rates, label=f'voltage_violation_rates')
+        plt.plot(voltage_violations, label=f'voltage_violation_rates')
         plt.xlabel('Step')
         plt.ylabel('电压越限率')
         plt.title('电压越限率变化')
         plt.legend()
+        plt.savefig('picture/电压越限率变化.png')  # 保存图片
         plt.show()
 
     @classmethod
@@ -58,6 +60,7 @@ class DataPlot:
         plt.title('PV Node Actions Over Time')
         plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
         plt.grid(True)
+        plt.savefig('picture/PV节点动作.png')  # 保存图片
         plt.show()
 
     @classmethod
@@ -80,6 +83,7 @@ class DataPlot:
         plt.title('en Node p Actions Over Time')
         plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
         plt.grid(True)
+        plt.savefig('picture/EN节点无功输出.png')  # 保存图片
         plt.show()
 
     @classmethod
@@ -102,6 +106,7 @@ class DataPlot:
         plt.title('en Node q Actions Over Time')
         plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
         plt.grid(True)
+        plt.savefig('picture/EN节点有功输出.png')  # 保存图片
         plt.show()
 
     @classmethod
@@ -130,5 +135,6 @@ class DataPlot:
         plt.title('PV and EN Rewards for Each Agent Over Time')
         plt.legend()
         plt.grid(True)
+        plt.savefig('picture/智能体节点reward变化.png')  # 保存图片
         # 显示图形
         plt.show()

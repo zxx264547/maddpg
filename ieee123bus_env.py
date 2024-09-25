@@ -60,7 +60,7 @@ class IEEE123bus(gym.Env):
             pp.runpp(self.network, max_iteration=500)
         except pp.powerflow.LoadflowNotConverged:
             print("Power flow for PV did not converge")
-            return pv_next_states, pv_rewards, [True] * len(self.pv_buses), es_next_states, es_rewards, [True] * len(self.es_buses),  # 终止当前回合
+            # return -1, -99999, [True] * len(self.pv_buses), -1, -99999, [True] * len(self.es_buses),  # 终止当前回合
 
         # # 潮流计算成功，获得所有节点电压，用于计算单个智能体的reward
         # all_voltage_values = self.network.res_bus['vm_pu'].to_numpy()
@@ -144,7 +144,7 @@ class IEEE123bus(gym.Env):
         high_voltage_violations = np.maximum(voltage - self.vmax, 0)
         # 计算总的电压越限程度
         voltage_violations = low_voltage_violations + high_voltage_violations
-        reward = -voltage_violations * 100
+        reward = -voltage_violations * 1000
         # reward是一个标量
         return reward
 

@@ -110,17 +110,19 @@ class PVAgent:
         self.target_value_net.to(self.device)
 
     #使用epsilon-贪心策略获取光伏的动作
-    def get_action(self, state, epsilon=0.1):
+    def get_action(self, state, epsilon=0):
         #以概率epsilon选择一个随机动作（探索）
         if random.random() < epsilon:
             # 生成一个在[-1,1]范围内的随机动作（动作维度为输出层的维度），概率为epsilon
-            return np.random.uniform(-1, 1, self.policy_net.linear3.out_features)
+            return np.random.uniform(-0.5, 0.5, self.policy_net.linear3.out_features)
         else:
             # 使用策略网络选择动作，概率为（1-epsilon）
             state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            # todo:动作约束
             action = self.policy_net.forward(state)
-            return action.detach().cpu().numpy()[0]
-
+            action = action.detach().cpu().numpy()[0]
+            # return np.clip(action, -1, 1)
+            return action
     #目标网络的参数以软更新的方式更新
     def update_target_networks(self, soft_tau):
         for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
@@ -152,13 +154,16 @@ class StorageAgent:
         self.value_net.to(self.device)
         self.target_value_net.to(self.device)
 
-    def get_action(self, state, epsilon=0.1):
+    def get_action(self, state, epsilon=0):
         if random.random() < epsilon:
-            return np.random.uniform(-1, 1, self.policy_net.linear3.out_features)
+            return np.random.uniform(-0.5, 0.5, self.policy_net.linear3.out_features)
         else:
             state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             action = self.policy_net.forward(state)
-            return action.detach().cpu().numpy()[0]
+            # todo:动作约束
+            action = action.detach().cpu().numpy()[0]
+            # return np.clip(action, -1, 1)
+            return action
 
     def update_target_networks(self, soft_tau):
         for target_param, param in zip(self.target_value_net.parameters(), self.value_net.parameters()):
@@ -278,6 +283,7 @@ class MADDPG:
         alltime_es_rewards = []
         alltime_power_loss = []
         voltage_violation_rates = []
+        voltage_violations = []
 
 
         # 初始化缓冲区
@@ -321,10 +327,10 @@ class MADDPG:
             voltage = env.network.res_bus.vm_pu.to_numpy()
             alltime_voltage_data.append(voltage)
             # 计算电压越限率
-            violations = np.logical_or(voltage < 0.95, voltage > 1.05)  # 计算越限节点的数量
-            num_violations = np.sum(violations)  # 计算超出范围的节点数量
-            voltage_violation_rate = num_violations / len(voltage)
-            voltage_violation_rates.append(voltage_violation_rate)
+            # violations = np.logical_or(voltage < 0.95, voltage > 1.05)  # 计算越限节点的数量
+            # num_violations = np.sum(violations)  # 计算超出范围的节点数量
+            # voltage_violation_rate = num_violations / len(voltage)
+            # voltage_violation_rates.append(voltage_violation_rate)
             """End record fakedata"""
 
             """计算全局奖励"""
@@ -335,8 +341,9 @@ class MADDPG:
             # 对于高于上限的电压，计算为 voltage - upper_limit
             high_voltage_violations = np.maximum(voltage - 1.05, 0)
             # 计算总的电压越限程度
-            voltage_violations = sum(low_voltage_violations) + sum(high_voltage_violations)
-            sum_reward = -voltage_violations * 100
+            voltage_violation = sum(low_voltage_violations) + sum(high_voltage_violations)
+            voltage_violations.append(voltage_violation)
+            sum_reward = -voltage_violation * 1000
 
             # TODO:这里的rewards要考虑总体的rewards（论文中rewards的改变也是在这里体现）
             global_reward_pv = self.beta * sum_reward + rewards_pv - total_power_loss
@@ -358,12 +365,12 @@ class MADDPG:
 
             #更新网络参数
             self.update()
-            print(f"episode: {episode}, voltage_violation_rate {voltage_violation_rate}, "
+            print(f"episode: {episode}, voltage_violations {voltage_violation}, "
                   f"sum_reward :{sum_reward}")
             # 打包数据
         result = (
             alltime_voltage_data,
-            voltage_violation_rates,
+            voltage_violations,
             alltime_pv_rewards,
             alltime_es_rewards,
             alltime_pv_actions,
