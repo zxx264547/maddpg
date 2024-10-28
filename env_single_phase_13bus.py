@@ -71,7 +71,7 @@ class IEEE13bus(gym.Env):
 
     
     def step_load(self, action, load_p, load_q, pv_p): #state-transition with specific load
-        #this function is to load real-world fakedata
+        #this function is to load real-world data
         done = False 
         
         reward = float(-50*LA.norm(action)**2 -100*LA.norm(np.clip(self.state-self.vmax, 0, np.inf))**2

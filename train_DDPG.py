@@ -26,7 +26,7 @@ from IEEE_13_3p import IEEE13bus3p, create_13bus3p
 from safeDDPG import ValueNetwork, SafePolicyNetwork, DDPG, ReplayBuffer, ReplayBufferPI, PolicyNetwork, SafePolicy3phase, LinearPolicy
 
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda" if use_cuda else "cpu")
+device   = torch.device("cuda" if use_cuda else "cpu")
 
 parser = argparse.ArgumentParser(description='Single Phase Safe DDPG')
 parser.add_argument('--env_name', default="13bus",
@@ -167,10 +167,10 @@ elif (FLAG ==1):
     #     agent_list[i].value_net.load_state_dict(valuenet_dict)
     #     agent_list[i].policy_net.load_state_dict(policynet_dict) 
     #     for target_param, param in zip(agent_list[i].target_value_net.parameters(), agent_list[i].value_net.parameters()):
-    #         target_param.fakedata.copy_(param.fakedata)
+    #         target_param.data.copy_(param.data)
 
     #     for target_param, param in zip(agent_list[i].target_policy_net.parameters(), agent_list[i].policy_net.parameters()):
-    #         target_param.fakedata.copy_(param.fakedata)
+    #         target_param.data.copy_(param.data)
 
     if args.algorithm == 'safe-ddpg':
         num_episodes = 200    #13-3p
