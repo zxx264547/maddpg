@@ -22,18 +22,26 @@ from dssdata.pfmodes import cfg_tspf
 
 DSS_PATH = "opendss_model/13bus/IEEE13Nodeckt.dss"
 
+# 在每个智能体节点都建立发电机
 def create_13bus3p(injection_bus):
-    #build the generators
+    # 根据文件建立dss系统（节点编号从1开始）
     distSys = SystemClass(path=DSS_PATH, kV=[115, 4.16, 0.48])
+    # 设置系统的仿真时间步长
     cfg_tspf(distSys,'0.02s')
+
     injection_bus_dict = dict()
     cmd = []
     for idx in injection_bus:
+        # 获得该节点的电压（三个相位的电压值）
         v_i = voltages.get_from_buses(distSys,[str(idx)])
+        # phase_i = 'abc'
         phase_i = v_i['phase'][0]
         injection_bus_dict[str(idx)]=phase_i
+        # 设置活动母线
         distSys.dss.Circuit.SetActiveBus(str(idx))
+        # 当前活动母线的电压基准值
         kv_base = distSys.dss.Bus.kVBase()
+        # 根据每个母线的相位信息动态生成相应的发电机配置命令，以便后续在 DSS 中添加这些发电机。
         for phase in phase_i:
             if phase == 'a':
                 cmd.append(f"New Generator.bus{idx}_1 bus1={idx}.1 Phases=1 kv={kv_base} kw=0 kvar=0 pf=1 model=1")
@@ -58,6 +66,7 @@ class IEEE13bus3p(gym.Env):
         self.vmin = vmin
         
         self.state = np.ones((self.agentnum, 3))
+    # 获得所有节点的电压，每一行为一个节点，每一列为一个相位
     def get_state(self):
         v_pu = voltages.get_from_buses(self.network, self.injection_bus_str)
         state_a = v_pu['v_pu_a'].to_numpy().reshape(-1,1)
@@ -67,10 +76,14 @@ class IEEE13bus3p(gym.Env):
         self.state[np.isnan(self.state)]=1.0
         return self.state
     
+    # action为当前动作，p_action为前一次动作
     def step_Preward(self, action, p_action): 
         
         done = False 
-        #global reward
+        '''
+        计算奖励
+        '''
+        # global reward
         reward = float(-1.0*LA.norm(p_action,1)-1000*LA.norm(np.clip(self.state-self.vmax, 0, np.inf),2)**2
                        -1000*LA.norm(np.clip(self.vmin-self.state, 0, np.inf),2)**2)
         # local reward
@@ -89,6 +102,7 @@ class IEEE13bus3p(gym.Env):
         #safe: -1.0*LA.norm(p_action[i],1) 
         # state-transition dynamics
         action = action * 100 #from kVar to MVar
+        # 发送指令给电网仿真软件。指令格式为更新特定发电机的无功功率（kvar）。
         for i, idx in enumerate(self.injection_bus_str):
             for phase in self.injection_bus[idx]:
                 if phase == 'a':
@@ -97,7 +111,9 @@ class IEEE13bus3p(gym.Env):
                     self.network.run_command(f"Generator.bus{idx}_2.kvar={action[i,1]}") 
                 elif phase == 'c':
                     self.network.run_command(f"Generator.bus{idx}_3.kvar={action[i,2]}") 
+        # 设置解决方案的编号，这通常表示在电力系统中需要考虑的计算步骤或阶段。
         self.network.dss.Solution.Number(1)
+        # 执行电网的解算，计算新的电压和电流状态。通过这个调用，电网将根据最新的无功功率设置更新状态。
         self.network.dss.Solution.Solve()
         self.state=self.get_state()
         
@@ -209,7 +225,7 @@ if __name__ == "__main__":
         state_list.append(state)
     state_list = np.array(state_list)
     # print(state_list.shape)
-    fig, axs = plt.subplots(len(injection_bus), 3, figsize=(3,11))
+    fig, axs = plt.subplots(len(injection_bus), 3, figsize=(5,10))
     for i in range(3):
         for j in range(len(injection_bus)):
             axs[j,i].hist(state_list[:,j,i])
