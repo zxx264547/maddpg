@@ -33,7 +33,9 @@ from scipy.io import loadmat
 use_cuda = torch.cuda.is_available()
 device   = torch.device("cuda" if use_cuda else "cpu")
 
-
+'''
+每个采样点数据都要计算每个智能体的动作
+'''
 p = loadmat('real_data/aggr_p.mat')
 p = p['p']
 
@@ -75,6 +77,7 @@ hidden_dim = 100
 ddpg_agent_list = []
 safe_ddpg_agent_list = []
 
+# 为每个智能体创建神经网络，存入列表
 for i in range(num_agent):
     safe_ddpg_value_net  = ValueNetwork(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)    
     safe_ddpg_policy_net = SafePolicyNetwork(env=env, obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim).to(device)
@@ -86,6 +89,7 @@ for i in range(num_agent):
     safe_ddpg_agent_list.append(safe_ddpg_agent)
 
 for i in range(num_agent):
+    # 加载训练好的神经网络
     safe_ddpg_policynet_dict = torch.load(f'checkpoints/{type_name}/13bus/safe-ddpg/policy_net_checkpoint_bus{i}.pth')
 
     safe_ddpg_agent_list[i].policy_net.load_state_dict(safe_ddpg_policynet_dict)
@@ -104,7 +108,9 @@ def plot_traj_no_leg(p,q,pv_p):
     state_list =[]
     state_list.append(state)
     
+    # 绘制在没有采取任何动作时的光伏输出和负载的情况
     print('ploting with zero action')
+    # 每个采样点数据就是一个step
     for step in tqdm(range(p.shape[0])):
         action = np.zeros((num_agent,1))
         next_state, reward, reward_sep, done = env.step_load(action, p[step],q[step],pv_p[step])
@@ -119,9 +125,10 @@ def plot_traj_no_leg(p,q,pv_p):
     axs[0].plot(range(len(action_list)), q[:len(action_list)], label = f'Reactive Load', linewidth=1.5)
     axs[0].plot(range(len(action_list)), pv_p[:len(action_list)], label = f'Solar', linewidth=1.5)
     
+    # 获得每个注入点的状态值
     for i in range(num_agent):    
         dps = axs[1].plot(range(len(action_list)), np.array(state_list)[:len(action_list),i], label = f'Bus {injection_bus[i]}', linewidth=1.5)
-    
+    # 绘制一条水平虚线，表示电压边界
     axs[1].plot(range(len(action_list)), [0.95]*len(action_list), '--', color='k', linewidth=1)
     axs[1].plot(range(len(action_list)), [1.05]*len(action_list), '--', color='k', linewidth=1)
 
@@ -133,6 +140,8 @@ def plot_traj_no_leg(p,q,pv_p):
     print('ploting with Stable-DDPG')
     for step in tqdm(range(p.shape[0])):
         action = []
+
+        # 每个智能体根据自生状态获取动作
         for i in range(num_agent):
             # sample action according to the current policy and exploration noise
             action_agent = safe_ddpg_agent_list[i].policy_net.get_action(np.asarray([state[i]]))
