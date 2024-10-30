@@ -34,7 +34,8 @@ use_cuda = torch.cuda.is_available()
 device   = torch.device("cuda" if use_cuda else "cpu")
 
 '''
-每个采样点数据都要计算每个智能体的动作
+每个采样点数据都要计算每个智能体的动作,
+然后给电网模型进行潮流计算，得出下一时刻的状态
 '''
 p = loadmat('real_data/aggr_p.mat')
 p = p['p']
